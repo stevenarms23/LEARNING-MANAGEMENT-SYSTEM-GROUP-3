@@ -293,8 +293,7 @@ class PUP_LMS_Portal:
             canvas.create_rectangle(0, 0, int(width * ratio), 5, fill=self.c_secondary_brown, width=0)
 
 if __name__ == "__main__":
-    # AUTOMATED FIX: If the file contains an old format or wrong course structures, 
-    # it gets wiped automatically so your 3 CMPE courses are generated immediately!
+    
     if os.path.exists("courses.json"):
         try:
             with open("courses.json", "r") as f:
