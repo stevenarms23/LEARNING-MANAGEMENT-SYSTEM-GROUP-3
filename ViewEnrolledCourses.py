@@ -34,32 +34,6 @@ class PUP_LMS_Portal:
         # Open up the course catalog layout grid instantly
         self.show_enrolled_courses_view()
 
-    def _seed_database_if_empty(self):
-        """Pre-populates fresh courses matching split parameters exactly."""
-        if len(self.backend.get_all_courses()) == 0:
-            print("Database empty. Seeding student enrollment course catalog...")
-            
-            # Simulated instructor credentials to skip backend verification rules
-            inst_1 = {"username": "Avena, Godofredo", "role": "instructor"}
-            inst_2 = {"username": "Lacatan, Luisito", "role": "instructor"}
-            inst_3 = {"username": "Avila, John Paul", "role": "instructor"}
-
-            self.backend.add_course(
-                inst_1, 
-                "CMPE 103 — Object Oriented Programming",
-                "Object-oriented programming concepts: classes, objects, inheritance, polymorphism, and encapsulation. [LEC:0.0|LAB:6.0|UNITS:2]"
-            )
-            self.backend.add_course(
-                inst_2, 
-                "CMPE 104 — Discrete Mathematics",
-                "Logic, set theory, combinatorics, graph theory, Boolean algebra, and mathematical proofs for engineers. [LEC:3.0|LAB:0.0|UNITS:3]"
-            )
-            self.backend.add_course(
-                inst_3, 
-                "CMPE 105 — Computer Hardware Fundamentals",
-                "Computer components, motherboards, processors, memory systems, storage devices, and hardware troubleshooting. [LEC:0.0|LAB:6.0|UNITS:2]"
-            )
-
     def setup_styles(self):
         self.style = ttk.Style()
         self.style.theme_use("clam")
@@ -79,13 +53,15 @@ class PUP_LMS_Portal:
 
         if is_enrolled:
             if self.backend.unenroll(self.current_user, course_id):
-                button_widget.config(text="ENROLL IN COURSE", bg=self.c_secondary_brown)
+                # Since we are in the "My Enrolled Courses" view, unenrollment should drop the card instantly
+                self.show_enrolled_courses_view()
+                return
         else:
             if self.backend.enroll(self.current_user, course_id):
                 button_widget.config(text="✓ ENROLLED", bg="#5e4431")
         
-        added_val = 1 if self.backend.is_enrolled(course_id, username) else 0
-        enrolled_count = 0 + added_val
+        updated_course = self.backend.get_course(course_id)
+        enrolled_count = len(updated_course.get("enrolled", [])) if updated_course else 0
         max_cap = 45
         
         count_label.config(text=f"{enrolled_count} / {max_cap} enrolled")
@@ -95,7 +71,8 @@ class PUP_LMS_Portal:
 
     def show_enrolled_courses_view(self):
         self.clear_container()
-        all_courses = self.backend.get_all_courses()
+        
+        enrolled_courses = self.backend.get_enrolled_courses(self.current_user)
 
         header = tk.Frame(self.main_container, bg=self.c_primary_dark, height=75)
         header.pack(fill=tk.X, side=tk.TOP)
@@ -109,13 +86,13 @@ class PUP_LMS_Portal:
         title_frame = tk.Frame(brand_frame, bg=self.c_primary_dark)
         title_frame.pack(side=tk.LEFT)
         tk.Label(title_frame, text="Polytechnic University of the Philippines", bg=self.c_primary_dark, fg="white", font=("Times New Roman", 14)).pack(anchor="w")
-        tk.Label(title_frame, text="LEARNING MANAGEMENT SYSTEM  •  COURSE CATALOG", bg=self.c_primary_dark, fg="#c9b097", font=("Times New Roman", 8, "bold")).pack(anchor="w")
+        tk.Label(title_frame, text="LEARNING MANAGEMENT SYSTEM  •  MY ENROLLED COURSES", bg=self.c_primary_dark, fg="#c9b097", font=("Times New Roman", 8, "bold")).pack(anchor="w")
 
         nav_frame = tk.Frame(header, bg=self.c_primary_dark)
         nav_frame.pack(side=tk.RIGHT, padx=30)
 
         for item in ["Dashboard", "My Courses", "Schedule", "Grades", "Courses"]:
-            is_active = (item == "Courses")
+            is_active = (item == "My Courses")
             bg_c = self.c_secondary_brown if is_active else self.c_primary_dark
             fg_c = "white" if is_active else "#dcd0c4"
             tk.Label(nav_frame, text=item, bg=bg_c, fg=fg_c, font=("Times New Roman", 10), padx=12, pady=8).pack(side=tk.LEFT, padx=2)
@@ -128,8 +105,8 @@ class PUP_LMS_Portal:
 
         title_left = tk.Frame(title_row, bg=self.c_bg)
         title_left.pack(side=tk.LEFT)
-        tk.Label(title_left, text="Available Courses", font=("Times New Roman", 22, "bold"), bg=self.c_bg, fg=self.c_primary_dark).pack(anchor="w")
-        self.lbl_summary = tk.Label(title_left, text=f"Showing {len(all_courses)} courses this semester", font=("Times New Roman", 10, "italic"), bg=self.c_bg, fg=self.c_text_muted)
+        tk.Label(title_left, text="My Enrolled Courses", font=("Times New Roman", 22, "bold"), bg=self.c_bg, fg=self.c_primary_dark).pack(anchor="w")
+        self.lbl_summary = tk.Label(title_left, text=f"You are currently enrolled in {len(enrolled_courses)} courses", font=("Times New Roman", 10, "italic"), bg=self.c_bg, fg=self.c_text_muted)
         self.lbl_summary.pack(anchor="w")
 
         badge_frame = tk.Frame(title_row, highlightbackground=self.c_border, highlightthickness=1, bg="white", padx=12, pady=4)
@@ -146,17 +123,10 @@ class PUP_LMS_Portal:
         self.search_entry.pack(side=tk.LEFT, padx=(0, 12), ipady=4)
 
         self.search_entry.bind("<KeyRelease>", self.execute_live_search)
-        self.search_entry.insert(0, "Search by title, code, or instructor...")
-        self.search_entry.bind("<FocusIn>", lambda e: self.search_entry.delete(0, tk.END) if self.search_entry.get() == "Search by title, code, or instructor..." else None)
+        self.search_entry.insert(0, "Search enrolled title, code, or instructor...")
+        self.search_entry.bind("<FocusIn>", lambda e: self.search_entry.delete(0, tk.END) if self.search_entry.get() == "Search enrolled title, code, or instructor..." else None)
 
-        ttk.Label(controls_bar, text="CATEGORY", style="Filter.TLabel", padding=(8, 5)).pack(side=tk.LEFT, padx=(0, 5))
-        cat_combo = ttk.Combobox(controls_bar, values=["All Categories"], state="readonly", width=14)
-        cat_combo.current(0)
-        cat_combo.pack(side=tk.LEFT, padx=(0, 12))
-
-        tk.Checkbutton(controls_bar, text="Open Only", bg=self.c_bg, fg=self.c_primary_dark, font=("Times New Roman", 9), activebackground=self.c_bg).pack(side=tk.LEFT, padx=(0, 12))
-        
-        self.lbl_count_badge = ttk.Label(controls_bar, text=f"{len(all_courses)} courses", style="Count.TLabel", padding=(10, 4))
+        self.lbl_count_badge = ttk.Label(controls_bar, text=f"{len(enrolled_courses)} Enrolled", style="Count.TLabel", padding=(10, 4))
         self.lbl_count_badge.pack(side=tk.LEFT)
 
         self.grid_frame = tk.Frame(body_wrapper, bg=self.c_bg)
@@ -165,7 +135,7 @@ class PUP_LMS_Portal:
         for c_idx in range(3):
             self.grid_frame.columnconfigure(c_idx, weight=1)
 
-        self.render_course_grid(all_courses)
+        self.render_course_grid(enrolled_courses)
 
         footer = tk.Frame(self.main_container, bg=self.c_primary_dark, height=30)
         footer.pack(fill=tk.X, side=tk.BOTTOM)
@@ -178,14 +148,23 @@ class PUP_LMS_Portal:
             child.destroy()
 
         if not target_courses:
-            no_res_lbl = tk.Label(self.grid_frame, text="❌ No matching courses found.", 
-                                  font=("Times New Roman", 12, "italic"), bg=self.c_bg, fg=self.c_text_muted)
-            no_res_lbl.grid(row=0, column=0, columnspan=3, pady=40, sticky="ew")
+            no_res_lbl = tk.Label(
+                self.grid_frame, 
+                text="⚠️ You are NOT enrolled in any course", 
+                font=("Times New Roman", 14, "bold"), 
+                bg=self.c_bg, 
+                fg=self.c_secondary_brown
+            )
+            no_res_lbl.grid(row=0, column=0, columnspan=3, pady=60, sticky="ew")
             return
 
         for idx, course in enumerate(target_courses):
             card = tk.Frame(self.grid_frame, highlightbackground=self.c_border, highlightthickness=1, bg=self.c_card_bg, padx=15, pady=15)
-            card.grid(row=0, column=idx, padx=8, pady=5, sticky="nsew")
+            
+            max_cols = 3
+            row_pos = idx // max_cols
+            col_pos = idx % max_cols
+            card.grid(row=row_pos, column=col_pos, padx=8, pady=5, sticky="nsew")
 
             raw_title = course.get("name", "Untitled Course")
             
@@ -196,13 +175,11 @@ class PUP_LMS_Portal:
                 code_part = "COURSE"
                 title_part = raw_title
 
-            # Individual Card Header Layout Panels
             card_head = tk.Frame(card, bg=self.c_card_bg)
             card_head.pack(fill=tk.X, pady=(0, 2))
             tk.Label(card_head, text=code_part, bg=self.c_card_bg, fg=self.c_primary_dark, font=("Times New Roman", 11, "bold")).pack(side=tk.LEFT)
-            tk.Label(card_head, text="OPEN", bg=self.c_secondary_brown, fg="white", font=("Times New Roman", 8, "bold"), padx=5, pady=1).pack(side=tk.RIGHT)
+            tk.Label(card_head, text="MY CLASS", bg="#5e4431", fg="white", font=("Times New Roman", 8, "bold"), padx=5, pady=1).pack(side=tk.RIGHT)
 
-            # Course Descriptive Metadata Field Groups
             tk.Label(card, text=title_part, bg=self.c_card_bg, fg=self.c_primary_dark, font=("Times New Roman", 11, "bold"), wraplength=270, justify="left").pack(anchor="w", pady=(0, 2))
             tk.Label(card, text="Engineering Core" if "103" in code_part or "105" in code_part else "Mathematics & Sciences", bg=self.c_accent_tan, fg=self.c_primary_dark, font=("Times New Roman", 8, "bold"), padx=5, pady=1).pack(anchor="w", pady=(0, 8))
 
@@ -218,7 +195,6 @@ class PUP_LMS_Portal:
                 sched_txt = "M/S 6:00PM-9:00PM / 2:00PM-5:00PM"
             tk.Label(meta_frame, text=f"◷  Schedule:  {sched_txt}", bg=self.c_card_bg, fg=self.c_text_dark, font=("Times New Roman", 9), wraplength=270, justify="left").pack(anchor="w", pady=1)
 
-            # Credit Unit Configuration Grids
             lec_v, lab_v, unit_v = "3.0", "0.0", "3.0"
             if "LEC:" in course.get("description", ""):
                 try:
@@ -237,7 +213,6 @@ class PUP_LMS_Portal:
                 tk.Label(box, text=label, bg=self.c_accent_tan, fg=self.c_text_muted, font=("Times New Roman", 8, "bold")).pack()
                 tk.Label(box, text=str(value), bg=self.c_accent_tan, fg=self.c_primary_dark, font=("Times New Roman", 10, "bold")).pack()
 
-            # Capacity Load Progress Bars
             enr_frame = tk.Frame(card, bg=self.c_card_bg)
             enr_frame.pack(fill=tk.X, pady=(0, 4))
             tk.Label(enr_frame, text="ENROLLMENT CAPACITY", bg=self.c_card_bg, fg=self.c_text_muted, font=("Times New Roman", 8, "bold")).pack(anchor="w")
@@ -245,9 +220,7 @@ class PUP_LMS_Portal:
             canvas_bar = tk.Canvas(enr_frame, bg="#e6dfd7", height=5, highlightthickness=0, bd=0)
             canvas_bar.pack(fill=tk.X, pady=2)
             
-            # FIXED: Removed mock items, set baseline value directly to 0
-            added_val = 1 if self.backend.is_enrolled(course["course_id"], self.current_user["username"]) else 0
-            enrolled_count = 0 + added_val
+            enrolled_count = len(course.get("enrolled", []))
             max_cap = 45
             
             ratio = min(max(enrolled_count / max_cap, 0.0), 1.0)
@@ -256,34 +229,30 @@ class PUP_LMS_Portal:
             lbl_capacity = tk.Label(enr_frame, text=f"{enrolled_count} / {max_cap} enrolled", bg=self.c_card_bg, fg=self.c_text_muted, font=("Times New Roman", 9))
             lbl_capacity.pack(anchor="e")
 
-            # Main Body Field Descriptive Text Labels
             clean_desc = course.get("description", "").split("[LEC:")[0].strip()
             tk.Label(card, text=clean_desc, bg=self.c_card_bg, fg=self.c_text_muted, font=("Times New Roman", 9), wraplength=265, justify="left").pack(anchor="w", fill=tk.BOTH, expand=True, pady=(0, 10))
 
-            # Enrollment Toggle Action Command Triggers
-            is_currently_enrolled = self.backend.is_enrolled(course["course_id"], self.current_user["username"])
-            btn_txt = "✓ ENROLLED" if is_currently_enrolled else "ENROLL IN COURSE"
-            btn_color = "#5e4431" if is_currently_enrolled else self.c_secondary_brown
-            
-            btn_action = tk.Button(card, text=btn_txt, font=("Times New Roman", 9, "bold"), bg=btn_color, fg="white", bd=0, pady=5, cursor="hand2")
+            # Enrollment Toggle Action (Since they see this view, they are enrolled; clicking unenrolls them)
+            btn_action = tk.Button(card, text="UNENROLL", font=("Times New Roman", 9, "bold"), bg=self.c_secondary_brown, fg="white", bd=0, pady=5, cursor="hand2")
             btn_action.config(command=lambda cid=course["course_id"], b=btn_action, l=lbl_capacity, bar=canvas_bar: self.handle_enrollment_toggle(cid, b, l, bar))
             btn_action.pack(fill=tk.X, side=tk.BOTTOM)
 
     def execute_live_search(self, event=None):
         """Filters dashboard listings dynamically on character keys typing events."""
         query = self.search_entry.get().strip().lower()
-        if query == "search by title, code, or instructor...":
+        if query == "search enrolled title, code, or instructor...":
             query = ""
 
-        all_records = self.backend.get_all_courses()
+        # CHANGED: Ensure search also filters only within enrolled items
+        all_records = self.backend.get_enrolled_courses(self.current_user)
         filtered_results = []
 
         for course in all_records:
             if query in course.get("name", "").lower() or query in course.get("description", "").lower() or query in course.get("instructor", "").lower():
                 filtered_results.append(course)
 
-        self.lbl_summary.config(text=f"Showing {len(filtered_results)} courses this semester")
-        self.lbl_count_badge.config(text=f"{len(filtered_results)} courses")
+        self.lbl_summary.config(text=f"You are currently enrolled in {len(filtered_results)} courses")
+        self.lbl_count_badge.config(text=f"{len(filtered_results)} Enrolled")
         self.render_course_grid(filtered_results)
 
     def _draw_progress(self, canvas, ratio):
@@ -293,7 +262,7 @@ class PUP_LMS_Portal:
             canvas.create_rectangle(0, 0, int(width * ratio), 5, fill=self.c_secondary_brown, width=0)
 
 if __name__ == "__main__":
-    
+   
     if os.path.exists("courses.json"):
         try:
             with open("courses.json", "r") as f:
